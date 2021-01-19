@@ -12,12 +12,15 @@ class Vacuum
             nh(),
             start(nh.advertiseService("start", &Vacuum::start_callback, this)),
             loop(nh.createTimer(ros::Duration(1.0), &Vacuum::timer_callback, this)),
-            state(State::CHARGING)
+            state(State::CHARGING),
+            started(false),
+            power(100)
         {
         }
 
         bool start_callback(std_srvs::Empty::Request &, std_srvs::Empty::Response &) 
         {
+            started = true;
             return true;
         }
 
@@ -26,23 +29,47 @@ class Vacuum
             switch(state)
             {
                 case State::CHARGING:
-                    ROS_INFO("Charging");
+                    ROS_INFO_STREAM("Charging: " << power);
+                    if(started && power > 75)
+                    {
+                        state = State::VACUUMING;
+                    }
+
+                    // technically power could be another state
+                    if(power < 100)
+                    {
+                        power += 10;
+                    }
                     break;
                 case State::VACUUMING:
-                    ROS_INFO("Vacuuming");
+                    ROS_INFO_STREAM("Vacuuming: " << power);
+                    power -= 10;
+                    if(power < 25)
+                    {
+                        state = State::RETURNING;
+                    }
                     break;
                 case State::RETURNING:
-                    ROS_INFO("Returning");
+                    ROS_INFO_STREAM("Returning: " << power);
+                    power -= 5;
+                    if(power == 10)
+                    {
+                        state = State::CHARGING;
+                    }
                     break;
                 default:
                     throw std::logic_error("Invalid State");
             }
+            // reset the events
+            started = false;
         }
     private:
         ros::NodeHandle nh;
         ros::ServiceServer start;
         ros::Timer loop;
         enum class State {CHARGING, VACUUMING, RETURNING} state;
+        bool started;
+        int power;
 };
 
 int main(int argc, char * argv[])
